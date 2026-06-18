@@ -1,0 +1,64 @@
+{
+  "tab": {
+    "books": "Books",
+    "blacklist": "Blacklist"
+  },
+  "table": {
+    "perk": "Perk",
+    "plugin": "Plugin",
+    "dpf_formid": "DPF FormID",
+    "name": "Name",
+    "editorid": "EditorID",
+    "weight": "Weight",
+    "value": "Value"
+  },
+  "field": {
+    "name": "Name",
+    "description": "Description",
+    "model_path": "NIF model path",
+    "editorid_readonly": "EditorID",
+    "weight": "Weight",
+    "value": "Value",
+    "filter": "Filter",
+    "perk_key": "Perk key",
+    "plugin_name": "Plugin name",
+    "base_book": "Base book"
+  },
+  "button": {
+    "save": "Save",
+    "reset_overrides": "Reset Overrides",
+    "blacklist_delete": "Blacklist / Delete",
+    "refresh_rebuild": "Refresh / Rebuild",
+    "add_perk": "Add Perk",
+    "add_plugin": "Add Plugin",
+    "remove": "Remove",
+    "clear_base_book": "Clear Base"
+  },
+  "section": {
+    "plugins": "Plugins",
+    "perks": "Perks"
+  },
+  "menu": {
+    "section": "Book of Perks",
+    "select_book": "Select a book.",
+    "editing": "Editing"
+  },
+  "status": {
+    "invalid_perk": "Invalid perk.",
+    "book_saved": "Book saved.",
+    "override_removed": "Override removed.",
+    "perk_blacklisted": "Perk moved to blacklist.",
+    "rebuild_complete": "Rebuild complete.",
+    "base_book_saved": "Base book saved.",
+    "base_book_cleared": "Base book cleared."
+  },
+  "common": {
+    "select": "Select",
+    "automatic": "Automatic"
+  },
+  "tooltip": {
+    "dpf_plugin": "DPF plugin",
+    "full_formid": "Full FormID",
+    "perk_plugin": "Perk plugin"
+  }
+}

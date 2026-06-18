@@ -17,6 +17,15 @@ function(copyOutputs TARGET_FOLDER)
         VERBATIM
     )
 
+    if(IS_DIRECTORY "${PROJECT_SOURCE_DIR}/Data")
+        add_custom_command(
+            TARGET "${PROJECT_NAME}"
+            POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_directory "${PROJECT_SOURCE_DIR}/Data" "${TARGET_FOLDER}"
+            VERBATIM
+        )
+    endif()
+
     # If you perform a "Debug" build, also copy .pdb file (for debug symbols)
     if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
         add_custom_command(
