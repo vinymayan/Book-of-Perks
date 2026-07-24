@@ -107,6 +107,32 @@ void Manager::PopulateAllLists() {
     _readyCallbacks.clear();
 }
 
+void Manager::RefreshLists(std::string_view a_signatures) {
+    const auto includes = [a_signatures](std::string_view a_signature) {
+        std::size_t begin = 0;
+        while (begin <= a_signatures.size()) {
+            const auto end = a_signatures.find(',', begin);
+            auto token = a_signatures.substr(begin, end == std::string_view::npos ? a_signatures.size() - begin : end - begin);
+            while (!token.empty() && token.front() == ' ') token.remove_prefix(1);
+            while (!token.empty() && token.back() == ' ') token.remove_suffix(1);
+            if (token == a_signature) return true;
+            if (end == std::string_view::npos) break;
+            begin = end + 1;
+        }
+        return false;
+    };
+
+    if (a_signatures.empty() || includes("All")) {
+        _isPopulated = false;
+        PopulateAllLists();
+        return;
+    }
+    if (includes("PERK")) PopulateList<RE::BGSPerk>("Perk", IsValidPerk);
+    if (includes("BOOK")) {
+        PopulateList<RE::TESObjectBOOK>("Book", [](RE::TESObjectBOOK* book) { return book != nullptr; });
+    }
+}
+
 const std::vector<InternalFormInfo>& Manager::GetList(const std::string& typeName) {
     static std::vector<InternalFormInfo> empty;
     auto it = _dataStore.find(typeName);

@@ -4,8 +4,6 @@
 #include "DPFAPI.h"
 #include "logger.h"
 
-#include "RE/C/ConsoleLog.h"
-#include "RE/F/FxDelegateArgs.h"
 #include "RE/I/ItemRemoveReason.h"
 #include "RE/S/SendUIMessage.h"
 #include "RE/U/UIMessageQueue.h"
@@ -17,7 +15,6 @@
 
 namespace {
     constexpr auto kDPFOwner = "BookOfPerks";
-    constexpr std::string_view kGetAllSkillBooksCommand = "getallskillbooks";
 
     struct BookActivateHook {
         static bool thunk(RE::TESObjectBOOK* self, RE::TESObjectREFR* targetRef, RE::TESObjectREFR* activatorRef, std::uint8_t arg3, RE::TESBoundObject* object, std::int32_t targetCount) {
@@ -71,48 +68,6 @@ namespace {
         static inline REL::Relocation<decltype(thunk)> func;
     };
 
-    bool IsGetAllSkillBooksCommand(std::string_view command) {
-        while (!command.empty() && std::isspace(static_cast<unsigned char>(command.front()))) {
-            command.remove_prefix(1);
-        }
-        while (!command.empty() && std::isspace(static_cast<unsigned char>(command.back()))) {
-            command.remove_suffix(1);
-        }
-
-        return command.size() == kGetAllSkillBooksCommand.size() &&
-            std::equal(command.begin(), command.end(), kGetAllSkillBooksCommand.begin(), [](char a, char b) {
-                return std::tolower(static_cast<unsigned char>(a)) == std::tolower(static_cast<unsigned char>(b));
-            });
-    }
-
-    struct ConsoleCommandHook {
-        static void thunk(RE::FxDelegateArgs* args) {
-            if (args && args->GetArgCount() > 0 && (*args)[0].IsString()) {
-                if (const auto command = (*args)[0].GetString(); command && IsGetAllSkillBooksCommand(command)) {
-                    Manager::GetSingleton()->PopulateAllLists();
-                    if (!DPF::GetAPI()) {
-                        logger::warn("[BookManager] Console command getallskillbooks falhou: DPF API indisponivel.");
-                        if (auto console = RE::ConsoleLog::GetSingleton()) {
-                            console->Print("Book of Perks: DPF API indisponivel.");
-                        }
-                        return;
-                    }
-
-                    BookManager::GetSingleton()->Initialize();
-                    const auto addedCount = BookManager::GetSingleton()->GiveAllBooksToPlayer();
-                    if (auto console = RE::ConsoleLog::GetSingleton()) {
-                        console->Print("Book of Perks: adicionados %u skill books ao player.", addedCount);
-                    }
-                    return;
-                }
-            }
-
-            func(args);
-        }
-
-        static inline REL::Relocation<decltype(thunk)> func;
-    };
-
     std::string BuildEditorID(const InternalFormInfo& info) {
         std::string id = "BoP_Learn_";
         id += !info.editorID.empty() ? info.editorID : std::format("{:08X}", info.formID);
@@ -139,9 +94,10 @@ namespace {
         return std::format("perk:{}", perkKey);
     }
 
-    void LogDPFFormID(std::string_view action, std::string_view key, RE::FormID formID, std::uint32_t localID) {
-        logger::info("[BookManager] DPF {} owner '{}' key '{}' FormID {:08X} localID {:06X}.",
-            action, kDPFOwner, key, formID, localID);
+    void LogDPFFormID(std::string_view action, std::string_view key, RE::FormID formID,
+        std::uint32_t pluginNumber, std::uint32_t localID) {
+        logger::info("[BookManager] DPF {} owner '{}' key '{}' plugin '{}' ({}) FormID {:08X} localID {:06X}.",
+            action, kDPFOwner, key, DPF::PluginNameForNumber(pluginNumber), pluginNumber, formID, localID);
     }
 }
 
@@ -204,21 +160,18 @@ void BookManager::Initialize() {
 }
 
 void BookManager::InstallHooks() {
-    SKSE::AllocTrampoline(28);
+    SKSE::AllocTrampoline(14);
     auto& trampoline = SKSE::GetTrampoline();
 
     REL::Relocation<std::uintptr_t> readFunc{ RELOCATION_ID(17439, 17842) };
     BookReadHook::func = trampoline.write_branch<5>(readFunc.address(), BookReadHook::thunk);
-
-    REL::Relocation<std::uintptr_t> consoleExecuteFunc{ RELOCATION_ID(50157, 51084) };
-    ConsoleCommandHook::func = trampoline.write_branch<5>(consoleExecuteFunc.address(), ConsoleCommandHook::thunk);
 
     REL::Relocation<std::uintptr_t> bookMenuVTable{ RE::VTABLE_BookMenu[0] };
     BookMenuProcessHook::func = bookMenuVTable.write_vfunc(0x4, BookMenuProcessHook::thunk);
 
     REL::Relocation<std::uintptr_t> vtbl{ RE::TESObjectBOOK::VTABLE[0] };
     BookActivateHook::func = vtbl.write_vfunc(0x37, BookActivateHook::thunk);
-    logger::info("[BookManager] Hooks de leitura/menu/ativacao/console de livros instalados.");
+    logger::info("[BookManager] Hooks de leitura/menu/ativacao de livros instalados.");
 }
 
 void BookManager::RebuildDynamicBooks() {
@@ -229,6 +182,7 @@ void BookManager::RebuildDynamicBooks() {
     _bookToPerk.clear();
     _perkToBook.clear();
     _bookDescriptions.clear();
+    _bookSlots.clear();
     Initialize();
 }
 
@@ -238,6 +192,7 @@ void BookManager::Revert() {
     _bookToPerk.clear();
     _perkToBook.clear();
     _bookDescriptions.clear();
+    _bookSlots.clear();
 }
 
 RE::TESObjectBOOK* BookManager::GetBookForPerk(RE::BGSPerk* perk) const {
@@ -291,6 +246,15 @@ const std::string* BookManager::GetCachedDescription(RE::TESObjectBOOK* book) co
 
     auto it = _bookDescriptions.find(book->GetFormID());
     return it != _bookDescriptions.end() ? &it->second : nullptr;
+}
+
+std::optional<BookManager::DynamicFormSlot> BookManager::GetDynamicFormSlot(RE::TESObjectBOOK* book) const {
+    if (!book) {
+        return std::nullopt;
+    }
+
+    const auto it = _bookSlots.find(book->GetFormID());
+    return it != _bookSlots.end() ? std::optional{ it->second } : std::nullopt;
 }
 
 bool BookManager::ApplyBookPerk(RE::TESObjectBOOK* book, RE::TESObjectREFR* reader) const {
@@ -378,12 +342,14 @@ RE::TESObjectBOOK* BookManager::CreateBookForPerk(RE::BGSPerk* perk, const Inter
     }
 
     const auto key = BuildDPFKey(perk, info);
+    std::uint32_t pluginNumber = 0;
     std::uint32_t localID = 0;
     bool existed = false;
     auto createdForm = dpf->GetOrCreateByOwnerKey(
         kDPFOwner,
         key.c_str(),
         static_cast<std::uint32_t>(RE::FormType::Book),
+        &pluginNumber,
         &localID,
         &existed);
     auto book = createdForm ? createdForm->As<RE::TESObjectBOOK>() : nullptr;
@@ -393,7 +359,11 @@ RE::TESObjectBOOK* BookManager::CreateBookForPerk(RE::BGSPerk* perk, const Inter
         return nullptr;
     }
 
-    LogDPFFormID(existed ? "recovered" : "created", key, book->GetFormID(), localID);
+    if (pluginNumber == 0) {
+        pluginNumber = dpf->GetPluginNumberForFormId(book->GetFormID());
+    }
+    _bookSlots[book->GetFormID()] = { pluginNumber, localID };
+    LogDPFFormID(existed ? "recovered" : "created", key, book->GetFormID(), pluginNumber, localID);
     logger::info("[BookManager] Mapping perk {:08X} '{}' -> book {:08X}.",
         perk->GetFormID(), FormUtil::NormalizeFormID(perk), book->GetFormID());
     ConfigureBookForPerk(book, perk, info, baseBook);
@@ -436,6 +406,7 @@ void BookManager::RemoveBookRuntimeMapping(RE::FormID perkID) {
     _perkToBook.erase(perkIt);
     _bookToPerk.erase(bookID);
     _bookDescriptions.erase(bookID);
+    _bookSlots.erase(bookID);
     std::erase_if(_books, [bookID](RE::TESObjectBOOK* book) {
         return !book || book->GetFormID() == bookID;
     });

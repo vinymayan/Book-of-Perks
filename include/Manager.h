@@ -41,6 +41,7 @@ public:
     }
 
     void PopulateAllLists();
+    void RefreshLists(std::string_view a_signatures);
 
     static std::string ToUTF8(std::string_view a_str);
     const std::vector<InternalFormInfo>& GetList(const std::string& typeName);
@@ -54,13 +55,13 @@ public:
 
 
     const InternalFormInfo* GetInfoByID(const std::string& type, RE::FormID id);
+    bool _isPopulated = false;
 private:
     Manager() = default;
 
     template <typename T>
     void PopulateList(const std::string& a_typeName, std::function<bool(T*)> a_filter = nullptr);
 
-    bool _isPopulated = false;
     std::map<std::string, std::vector<InternalFormInfo>> _dataStore;
     std::vector<std::function<void()>> _readyCallbacks;
 };

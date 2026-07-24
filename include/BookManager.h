@@ -3,11 +3,17 @@
 #include "Manager.h"
 
 #include <string_view>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 class BookManager {
 public:
+    struct DynamicFormSlot {
+        std::uint32_t pluginNumber{};
+        std::uint32_t localID{};
+    };
+
     static BookManager* GetSingleton();
 
     void Initialize();
@@ -20,6 +26,7 @@ public:
     [[nodiscard]] bool IsBookOfPerk(RE::TESForm* book) const;
     [[nodiscard]] bool AddBookToRef(RE::TESObjectREFR* target, RE::BGSPerk* perk, std::int32_t count) const;
     [[nodiscard]] const std::string* GetCachedDescription(RE::TESObjectBOOK* book) const;
+    [[nodiscard]] std::optional<DynamicFormSlot> GetDynamicFormSlot(RE::TESObjectBOOK* book) const;
 
     bool ApplyBookPerk(RE::TESObjectBOOK* book, RE::TESObjectREFR* reader) const;
     bool ApplyBookPerkAndConsume(RE::TESObjectBOOK* book, RE::TESObjectREFR* reader) const;
@@ -44,4 +51,5 @@ private:
     std::unordered_map<RE::FormID, RE::FormID> _bookToPerk;
     std::unordered_map<RE::FormID, RE::FormID> _perkToBook;
     std::unordered_map<RE::FormID, std::string> _bookDescriptions;
+    std::unordered_map<RE::FormID, DynamicFormSlot> _bookSlots;
 };

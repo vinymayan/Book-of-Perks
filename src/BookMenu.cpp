@@ -2,10 +2,10 @@
 
 #include "BookManager.h"
 #include "BookSettings.h"
+#include "DPFAPI.h"
 #include "SKSEMenuFramework.h"
 #include "logger.h"
 
-#include <array>
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -117,16 +117,6 @@ namespace {
         return false;
     }
 
-    bool DescriptionInput(const char* label, std::string& value) {
-        std::array<char, 2048> buffer{};
-        CopyToBuffer(buffer.data(), buffer.size(), value);
-        if (ImGuiMCP::InputTextMultiline(label, buffer.data(), buffer.size(), { 520.0f, 140.0f }, 0, nullptr, nullptr)) {
-            value = buffer.data();
-            return true;
-        }
-        return false;
-    }
-
     std::string DefaultBookName(const InternalFormInfo& info) {
         return std::format("Learn {}", info.name);
     }
@@ -176,10 +166,6 @@ namespace {
         return key.empty() ? GetLoc("common.automatic", "Automatic") : key;
     }
 
-    std::uint32_t GetLocalFormID(RE::TESForm* form) {
-        return form ? (form->GetFormID() & 0x00FFFFFF) : 0;
-    }
-
     std::vector<BookRow> BuildBookRows(std::string_view filter) {
         std::vector<BookRow> rows;
         for (const auto& info : Manager::GetSingleton()->GetList("Perk")) {
@@ -224,9 +210,6 @@ namespace {
         if (const auto info = FindPerkInfo(perkKey)) {
             if (editBuffer.name.empty()) {
                 editBuffer.name = DefaultBookName(*info);
-            }
-            if (editBuffer.description.empty()) {
-                editBuffer.description = info->description;
             }
         }
     }
@@ -366,10 +349,17 @@ namespace {
                     ImGuiMCP::TableNextColumn();
                     ImGuiMCP::Text("%s", info.pluginName.c_str());
                     ImGuiMCP::TableNextColumn();
-                    ImGuiMCP::Text("%06X", GetLocalFormID(book));
+                    const auto slot = BookManager::GetSingleton()->GetDynamicFormSlot(book);
+                    if (slot) {
+                        ImGuiMCP::Text("%u:%06X", slot->pluginNumber, slot->localID);
+                    } else {
+                        ImGuiMCP::TextUnformatted("-");
+                    }
                     if (ImGuiMCP::IsItemHovered()) {
-                        ImGuiMCP::SetTooltip("%s: Dynamic Persistent Forms.esp\n%s: %08X\n%s: %s",
-                            GetLoc("tooltip.dpf_plugin", "DPF plugin"), GetLoc("tooltip.full_formid", "Full FormID"),
+                        const auto dpfPlugin = slot ? DPF::PluginNameForNumber(slot->pluginNumber) : std::string{};
+                        ImGuiMCP::SetTooltip("%s: %s\n%s: %08X\n%s: %s",
+                            GetLoc("tooltip.dpf_plugin", "DPF plugin"), dpfPlugin.empty() ? "-" : dpfPlugin.c_str(),
+                            GetLoc("tooltip.full_formid", "Full FormID"),
                             book ? book->GetFormID() : 0, GetLoc("tooltip.perk_plugin", "Perk plugin"), info.pluginName.c_str());
                     }
                     ImGuiMCP::TableNextColumn();
@@ -398,7 +388,6 @@ namespace {
         ImGuiMCP::Text("%s: %s", GetLoc("menu.editing", "Editing"), selectedPerkKey.c_str());
 
         StringInput(GetLoc("field.name", "Name"), editBuffer.name);
-        DescriptionInput(GetLoc("field.description", "Description"), editBuffer.description);
         StringInput(GetLoc("field.model_path", "NIF model path"), editBuffer.modelPath, 512);
         if (const auto info = FindPerkInfo(selectedPerkKey)) {
             ImGuiMCP::Text("%s: %s", GetLoc("field.editorid_readonly", "EditorID"), DefaultEditorID(*info).c_str());
@@ -424,7 +413,6 @@ namespace {
 
     void __stdcall BooksRender() {
         BookSettings::Load();
-        Manager::GetSingleton()->PopulateAllLists();
 
         if (ImGuiMCP::Button(GetLoc("button.refresh_rebuild", "Refresh / Rebuild"))) {
             BookSettings::SaveBooks();
@@ -545,7 +533,6 @@ namespace {
 
     void __stdcall BlacklistRender() {
         BookSettings::Load();
-        Manager::GetSingleton()->PopulateAllLists();
 
         ImGuiMCP::Text("%s", GetLoc("section.plugins", "Plugins"));
         DrawBlacklistedPlugins();

@@ -6,7 +6,7 @@
   "table": {
     "perk": "Perk",
     "plugin": "Plugin",
-    "dpf_formid": "DPF FormID",
+    "dpf_formid": "DPF Slot",
     "name": "Name",
     "editorid": "EditorID",
     "weight": "Weight",
@@ -14,7 +14,6 @@
   },
   "field": {
     "name": "Name",
-    "description": "Description",
     "model_path": "NIF model path",
     "editorid_readonly": "EditorID",
     "weight": "Weight",
