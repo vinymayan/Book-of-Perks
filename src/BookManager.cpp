@@ -15,6 +15,25 @@
 
 namespace {
     constexpr auto kDPFOwner = "BookOfPerks";
+    constexpr float kBookOfPerksUpdateMarker = 3.0F;
+
+    void SendBooksUpdatedEvent() {
+        const auto dispatcher = SKSE::GetModCallbackEventSource();
+        if (!dispatcher) {
+            logger::warn("[BookManager] ModCallbackEvent source indisponivel; update de BOOK nao foi enviado.");
+            return;
+        }
+
+        SKSE::ModCallbackEvent event{
+            RE::BSFixedString("DynamicFormsGeneratorUpdated"),
+            RE::BSFixedString("BOOK"),
+            kBookOfPerksUpdateMarker,
+            nullptr
+        };
+        dispatcher->SendEvent(&event);
+        logger::info("[BookManager] DynamicFormsGeneratorUpdated enviado para BOOK com marcador {}.",
+            kBookOfPerksUpdateMarker);
+    }
 
     struct BookActivateHook {
         static bool thunk(RE::TESObjectBOOK* self, RE::TESObjectREFR* targetRef, RE::TESObjectREFR* activatorRef, std::uint8_t arg3, RE::TESBoundObject* object, std::int32_t targetCount) {
@@ -157,6 +176,7 @@ void BookManager::Initialize() {
 
     _initialized = true;
     logger::info("[BookManager] Registrados {} livros dinamicos para perks.", _books.size());
+    SendBooksUpdatedEvent();
 }
 
 void BookManager::InstallHooks() {

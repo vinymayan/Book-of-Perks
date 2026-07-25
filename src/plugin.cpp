@@ -11,13 +11,6 @@
 namespace {
     bool hasDFG = false;
 
-    constexpr std::uint32_t MakeFourCC(char a, char b, char c, char d) {
-        return static_cast<std::uint32_t>(a) |
-            (static_cast<std::uint32_t>(b) << 8) |
-            (static_cast<std::uint32_t>(c) << 16) |
-            (static_cast<std::uint32_t>(d) << 24);
-    }
-
     void InitializeBookManagers() {
         if (!DPF::GetAPI()) {
             logger::warn("[BookManager] DPF API ainda indisponivel. Initialize adiado.");
