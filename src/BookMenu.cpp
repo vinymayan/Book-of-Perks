@@ -23,6 +23,7 @@ namespace {
     std::string selectedPerkKey;
     BookSettings::BookOverride editBuffer;
     char filterBuffer[128]{};
+    char blacklistedPerkFilter[128]{};
     char pluginInput[128]{};
     char perkInput[128]{};
     char baseBookInput[128]{};
@@ -30,6 +31,11 @@ namespace {
     std::unordered_map<std::string, std::string> language;
 
     struct BookRow {
+        const InternalFormInfo* info{};
+        std::string perkKey;
+    };
+
+    struct BlacklistedPerkRow {
         const InternalFormInfo* info{};
         std::string perkKey;
     };
@@ -181,6 +187,38 @@ namespace {
 
             rows.push_back({ &info, std::move(perkKey) });
         }
+        return rows;
+    }
+
+    std::vector<BlacklistedPerkRow> BuildBlacklistedPerkRows(std::string_view filter) {
+        std::unordered_map<std::string, const InternalFormInfo*> perkInfoByKey;
+        const auto& perks = Manager::GetSingleton()->GetList("Perk");
+        perkInfoByKey.reserve(perks.size());
+        for (const auto& info : perks) {
+            perkInfoByKey.emplace(BookSettings::MakePerkKey(info), &info);
+        }
+
+        std::vector<BlacklistedPerkRow> rows;
+        rows.reserve(BookSettings::GetBlacklistedPerks().size());
+        for (const auto& perkKey : BookSettings::GetBlacklistedPerks()) {
+            const auto infoIt = perkInfoByKey.find(perkKey);
+            const auto info = infoIt != perkInfoByKey.end() ? infoIt->second : nullptr;
+            if (!ContainsInsensitive(perkKey, filter) &&
+                (!info || (!ContainsInsensitive(info->name, filter) &&
+                    !ContainsInsensitive(info->editorID, filter) &&
+                    !ContainsInsensitive(info->pluginName, filter) &&
+                    !ContainsInsensitive(info->GetDisplayName(), filter)))) {
+                continue;
+            }
+
+            rows.push_back({ info, perkKey });
+        }
+
+        std::ranges::sort(rows, [](const BlacklistedPerkRow& left, const BlacklistedPerkRow& right) {
+            const auto leftName = left.info && !left.info->name.empty() ? left.info->name : left.perkKey;
+            const auto rightName = right.info && !right.info->name.empty() ? right.info->name : right.perkKey;
+            return ToLower(leftName) < ToLower(rightName);
+        });
         return rows;
     }
 
@@ -468,18 +506,54 @@ namespace {
             }
         }
 
-        for (const auto& key : BookSettings::GetBlacklistedPerks()) {
-            ImGuiMCP::PushID(key.c_str());
-            ImGuiMCP::Text("%s", key.c_str());
-            ImGuiMCP::SameLine();
-            if (ImGuiMCP::Button(GetLoc("button.remove", "Remove"))) {
-                BookSettings::RemoveBlacklistedPerk(key);
-                BookSettings::SaveBlacklist();
-                BookManager::GetSingleton()->RebuildDynamicBooks();
-                ImGuiMCP::PopID();
-                break;
+        ImGuiMCP::InputText(GetLoc("field.blacklisted_perk_filter", "Filter blacklisted perks"),
+            blacklistedPerkFilter, sizeof(blacklistedPerkFilter));
+        const auto rows = BuildBlacklistedPerkRows(blacklistedPerkFilter);
+        std::string perkToRemove;
+
+        if (ImGuiMCP::BeginTable("BookOfPerksBlacklistedPerks", 4,
+            ImGuiMCP::ImGuiTableFlags_Borders | ImGuiMCP::ImGuiTableFlags_RowBg | ImGuiMCP::ImGuiTableFlags_Resizable |
+                ImGuiMCP::ImGuiTableFlags_Reorderable | ImGuiMCP::ImGuiTableFlags_ScrollY,
+            { 0.0f, 300.0f })) {
+            ImGuiMCP::TableSetupScrollFreeze(0, 1);
+            ImGuiMCP::TableSetupColumn(GetLoc("table.name", "Name"), ImGuiMCP::ImGuiTableColumnFlags_WidthStretch, 180.0f);
+            ImGuiMCP::TableSetupColumn(GetLoc("table.editorid", "EditorID"), ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, 180.0f);
+            ImGuiMCP::TableSetupColumn(GetLoc("table.perk_key", "Perk key"), ImGuiMCP::ImGuiTableColumnFlags_WidthStretch, 220.0f);
+            ImGuiMCP::TableSetupColumn(GetLoc("table.actions", "Actions"), ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGuiMCP::TableHeadersRow();
+
+            auto clipper = std::unique_ptr<ImGuiMCP::ImGuiListClipper, decltype(&ImGuiMCP::ImGuiListClipperManager::Destroy)>(
+                ImGuiMCP::ImGuiListClipperManager::Create(), &ImGuiMCP::ImGuiListClipperManager::Destroy);
+            ImGuiMCP::ImGuiListClipperManager::Begin(clipper.get(), static_cast<int>(rows.size()), 0.0f);
+            while (ImGuiMCP::ImGuiListClipperManager::Step(clipper.get())) {
+                for (int rowIndex = clipper->DisplayStart; rowIndex < clipper->DisplayEnd; ++rowIndex) {
+                    const auto& row = rows[static_cast<std::size_t>(rowIndex)];
+                    const auto name = row.info && !row.info->name.empty() ? row.info->name.c_str() : "-";
+                    const auto editorID = row.info && !row.info->editorID.empty() ? row.info->editorID.c_str() : "-";
+
+                    ImGuiMCP::PushID(row.perkKey.c_str());
+                    ImGuiMCP::TableNextRow();
+                    ImGuiMCP::TableNextColumn();
+                    ImGuiMCP::Text("%s", name);
+                    ImGuiMCP::TableNextColumn();
+                    ImGuiMCP::Text("%s", editorID);
+                    ImGuiMCP::TableNextColumn();
+                    ImGuiMCP::Text("%s", row.perkKey.c_str());
+                    ImGuiMCP::TableNextColumn();
+                    if (ImGuiMCP::Button(GetLoc("button.remove", "Remove"))) {
+                        perkToRemove = row.perkKey;
+                    }
+                    ImGuiMCP::PopID();
+                }
             }
-            ImGuiMCP::PopID();
+            ImGuiMCP::ImGuiListClipperManager::End(clipper.get());
+            ImGuiMCP::EndTable();
+        }
+
+        if (!perkToRemove.empty()) {
+            BookSettings::RemoveBlacklistedPerk(perkToRemove);
+            BookSettings::SaveBlacklist();
+            BookManager::GetSingleton()->RebuildDynamicBooks();
         }
     }
 

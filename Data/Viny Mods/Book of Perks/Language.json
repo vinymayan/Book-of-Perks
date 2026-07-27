@@ -9,6 +9,8 @@
     "dpf_formid": "DPF Slot",
     "name": "Name",
     "editorid": "EditorID",
+    "perk_key": "Perk key",
+    "actions": "Actions",
     "weight": "Weight",
     "value": "Value"
   },
@@ -19,6 +21,7 @@
     "weight": "Weight",
     "value": "Value",
     "filter": "Filter",
+    "blacklisted_perk_filter": "Filter blacklisted perks",
     "perk_key": "Perk key",
     "plugin_name": "Plugin name",
     "base_book": "Base book"
