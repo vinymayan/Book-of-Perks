@@ -1,19 +1,17 @@
 ﻿#include "logger.h"
 #include "BookManager.h"
 #include "BookMenu.h"
-#include "DPFAPI.h"
+#include "DFGAPI.h"
 #include "Manager.h"
 #include "Papyrus.h"
-#include "Serialization.h"
-
-#include <cstdint>
 
 namespace {
     bool hasDFG = false;
 
     void InitializeBookManagers() {
-        if (!DPF::GetAPI()) {
-            logger::warn("[BookManager] DPF API ainda indisponivel. Initialize adiado.");
+        const auto dfg = DFG::GetAPI();
+        if (!dfg || !dfg->IsReady()) {
+            logger::warn("[BookManager] DFG API ainda indisponivel ou nao pronta. Initialize adiado.");
             return;
         }
 
@@ -61,6 +59,11 @@ namespace {
                 return RE::BSEventNotifyControl::kContinue;
             }
             if (eventName == "DynamicFormsGeneratorUpdated") {
+                const std::string_view signature = a_event->strArg.c_str();
+                auto bookManager = BookManager::GetSingleton();
+                if (signature == "BOOK" && bookManager->IsInitializing()) {
+                    return RE::BSEventNotifyControl::kContinue;
+                }
                 PopulateListsForDFGUpdate(a_event->strArg.c_str());
                 return RE::BSEventNotifyControl::kContinue;
             }
@@ -80,9 +83,11 @@ void OnMessage(SKSE::MessagingInterface::Message* message) {
         BookMenu::Register();
     }
     if (message->type == SKSE::MessagingInterface::kDataLoaded) {
-        if (!hasDFG) {
-            Manager::GetSingleton()->PopulateAllLists();
+        Manager::GetSingleton()->PopulateAllLists();
+        if (hasDFG) {
             QueueInitializeBookManagers();
+        } else {
+            logger::error("[BookManager] DynamicFormsGenerator.dll nao encontrado; livros nao serao criados.");
         }
     }
 

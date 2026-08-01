@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <cctype>
 #include <rapidjson/document.h>
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
@@ -194,6 +195,37 @@ namespace BookSettings {
     std::string MakePerkKey(const InternalFormInfo& info) {
         const auto localID = (info.formID & 0xFF000000) == 0xFE000000 ? (info.formID & 0xFFF) : (info.formID & 0x00FFFFFF);
         return std::format("{}|{:X}", info.pluginName, localID);
+    }
+
+    std::string MakeBookEditorID(std::string_view perkKey) {
+        const auto separator = perkKey.rfind('|');
+        const auto pluginName = separator == std::string_view::npos ? perkKey : perkKey.substr(0, separator);
+        const auto localID = separator == std::string_view::npos ? std::string_view{ "0" } : perkKey.substr(separator + 1);
+
+        std::string pluginPart;
+        pluginPart.reserve((std::min)(pluginName.size(), std::size_t{ 48 }));
+        for (const auto ch : pluginName) {
+            if (pluginPart.size() == 48) {
+                break;
+            }
+            pluginPart.push_back(std::isalnum(static_cast<unsigned char>(ch)) ? ch : '_');
+        }
+
+        std::uint32_t pluginHash = 2166136261u;
+        for (const auto ch : pluginName) {
+            pluginHash ^= static_cast<unsigned char>(ch);
+            pluginHash *= 16777619u;
+        }
+
+        std::string normalizedLocalID(localID);
+        std::ranges::transform(normalizedLocalID, normalizedLocalID.begin(), [](const unsigned char ch) {
+            return std::isalnum(ch) ? static_cast<char>(std::toupper(ch)) : '_';
+        });
+        return std::format("BoP_Learn_{}_{:08X}_{}", pluginPart, pluginHash, normalizedLocalID);
+    }
+
+    std::string MakeBookEditorID(const InternalFormInfo& info) {
+        return MakeBookEditorID(MakePerkKey(info));
     }
 
     std::string MakeFormKey(RE::TESForm* form) {

@@ -2,7 +2,6 @@
 
 #include "BookManager.h"
 #include "BookSettings.h"
-#include "DPFAPI.h"
 #include "SKSEMenuFramework.h"
 #include "logger.h"
 
@@ -128,14 +127,7 @@ namespace {
     }
 
     std::string DefaultEditorID(const InternalFormInfo& info) {
-        std::string id = "BoP_Learn_";
-        id += !info.editorID.empty() ? info.editorID : std::format("{:08X}", info.formID);
-        for (auto& ch : id) {
-            if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_') {
-                ch = '_';
-            }
-        }
-        return id;
+        return BookSettings::MakeBookEditorID(info);
     }
 
     const InternalFormInfo* FindPerkInfo(std::string_view perkKey) {
@@ -283,7 +275,6 @@ namespace {
         }
         BookSettings::AddBlacklistedPerk(selectedPerkKey);
         BookSettings::SaveBlacklist();
-        BookManager::GetSingleton()->ReleaseBookForPerkKey(selectedPerkKey);
         BookManager::GetSingleton()->RebuildDynamicBooks();
         selectedPerkKey.clear();
         status = GetLoc("status.perk_blacklisted", "Perk moved to blacklist.");
@@ -319,9 +310,11 @@ namespace {
                         const auto label = std::format("{} ({})", displayName, key);
                         const bool selected = BookSettings::GetBaseBookKey() == key;
                         if (ImGuiMCP::Selectable(label.c_str(), selected)) {
-                            BookSettings::SetBaseBookKey(key);
-                            BookSettings::SaveBooks();
-                            BookManager::GetSingleton()->RebuildDynamicBooks();
+                            if (!selected) {
+                                BookSettings::SetBaseBookKey(key);
+                                BookSettings::SaveBooks();
+                                BookManager::GetSingleton()->RebuildDynamicBooks();
+                            }
                             CopyToBuffer(baseBookInput, sizeof(baseBookInput), key);
                             status = GetLoc("status.base_book_saved", "Base book saved.");
                         }
@@ -337,9 +330,11 @@ namespace {
         ImGuiMCP::PopID();
         ImGuiMCP::SameLine();
         if (ImGuiMCP::Button(GetLoc("button.clear_base_book", "Clear Base"))) {
-            BookSettings::SetBaseBookKey({});
-            BookSettings::SaveBooks();
-            BookManager::GetSingleton()->RebuildDynamicBooks();
+            if (!BookSettings::GetBaseBookKey().empty()) {
+                BookSettings::SetBaseBookKey({});
+                BookSettings::SaveBooks();
+                BookManager::GetSingleton()->RebuildDynamicBooks();
+            }
             baseBookInput[0] = '\0';
             status = GetLoc("status.base_book_cleared", "Base book cleared.");
         }
@@ -355,7 +350,7 @@ namespace {
             ImGuiMCP::TableSetupScrollFreeze(0, 1);
             ImGuiMCP::TableSetupColumn(GetLoc("table.perk", "Perk"), ImGuiMCP::ImGuiTableColumnFlags_WidthStretch, 190.0f);
             ImGuiMCP::TableSetupColumn(GetLoc("table.plugin", "Plugin"), ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, 150.0f);
-            ImGuiMCP::TableSetupColumn(GetLoc("table.dpf_formid", "DPF FormID"), ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, 90.0f);
+            ImGuiMCP::TableSetupColumn(GetLoc("table.dfg_slot", "DFG Slot"), ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, 90.0f);
             ImGuiMCP::TableSetupColumn(GetLoc("table.name", "Name"), ImGuiMCP::ImGuiTableColumnFlags_WidthStretch, 180.0f);
             ImGuiMCP::TableSetupColumn(GetLoc("table.editorid", "EditorID"), ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, 170.0f);
             ImGuiMCP::TableSetupColumn(GetLoc("table.weight", "Weight"), ImGuiMCP::ImGuiTableColumnFlags_WidthFixed, 70.0f);
@@ -394,9 +389,9 @@ namespace {
                         ImGuiMCP::TextUnformatted("-");
                     }
                     if (ImGuiMCP::IsItemHovered()) {
-                        const auto dpfPlugin = slot ? DPF::PluginNameForNumber(slot->pluginNumber) : std::string{};
                         ImGuiMCP::SetTooltip("%s: %s\n%s: %08X\n%s: %s",
-                            GetLoc("tooltip.dpf_plugin", "DPF plugin"), dpfPlugin.empty() ? "-" : dpfPlugin.c_str(),
+                            GetLoc("tooltip.runtime_plugin", "Runtime plugin"),
+                            slot && !slot->pluginName.empty() ? slot->pluginName.c_str() : "-",
                             GetLoc("tooltip.full_formid", "Full FormID"),
                             book ? book->GetFormID() : 0, GetLoc("tooltip.perk_plugin", "Perk plugin"), info.pluginName.c_str());
                     }
@@ -500,7 +495,6 @@ namespace {
             if (!key.empty()) {
                 BookSettings::AddBlacklistedPerk(key);
                 BookSettings::SaveBlacklist();
-                BookManager::GetSingleton()->ReleaseBookForPerkKey(key);
                 BookManager::GetSingleton()->RebuildDynamicBooks();
                 perkInput[0] = '\0';
             }
@@ -584,7 +578,6 @@ namespace {
             if (!plugin.empty()) {
                 BookSettings::AddBlacklistedPlugin(plugin);
                 BookSettings::SaveBlacklist();
-                BookManager::GetSingleton()->ReleaseBooksForPlugin(plugin);
                 BookManager::GetSingleton()->RebuildDynamicBooks();
                 pluginInput[0] = '\0';
             }

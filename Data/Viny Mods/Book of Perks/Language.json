@@ -6,7 +6,7 @@
   "table": {
     "perk": "Perk",
     "plugin": "Plugin",
-    "dpf_formid": "DPF Slot",
+    "dfg_slot": "DFG Slot",
     "name": "Name",
     "editorid": "EditorID",
     "perk_key": "Perk key",
@@ -59,7 +59,7 @@
     "automatic": "Automatic"
   },
   "tooltip": {
-    "dpf_plugin": "DPF plugin",
+    "runtime_plugin": "Runtime plugin",
     "full_formid": "Full FormID",
     "perk_plugin": "Perk plugin"
   }

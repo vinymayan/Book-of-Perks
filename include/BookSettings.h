@@ -25,6 +25,8 @@ namespace BookSettings {
 
     [[nodiscard]] std::string MakePerkKey(RE::BGSPerk* perk);
     [[nodiscard]] std::string MakePerkKey(const InternalFormInfo& info);
+    [[nodiscard]] std::string MakeBookEditorID(std::string_view perkKey);
+    [[nodiscard]] std::string MakeBookEditorID(const InternalFormInfo& info);
     [[nodiscard]] std::string MakeFormKey(RE::TESForm* form);
     [[nodiscard]] std::string GetBaseBookKey();
     void SetBaseBookKey(std::string_view bookKey);
