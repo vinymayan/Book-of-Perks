@@ -21,6 +21,42 @@ namespace {
     std::unordered_set<std::string> g_blacklistedPlugins;
     std::string g_baseBookKey;
 
+    std::string SanitizeEditorIDPart(std::string_view value) {
+        std::string result;
+        result.reserve(value.size());
+        for (const auto ch : value) {
+            result.push_back(std::isalnum(static_cast<unsigned char>(ch)) ? ch : '_');
+        }
+        return result;
+    }
+
+    std::string BuildBookEditorID(std::string_view pluginName, std::string_view perkIdentifier) {
+        auto pluginPart = SanitizeEditorIDPart(pluginName);
+        auto perkPart = SanitizeEditorIDPart(perkIdentifier);
+        if (pluginPart.empty()) {
+            pluginPart = "UnknownPlugin";
+        }
+        if (perkPart.empty()) {
+            perkPart = "0";
+        }
+
+        auto editorID = std::format("BoP_Learn_{}_{}", pluginPart, perkPart);
+        constexpr std::size_t kMaximumEditorIDLength = 127;
+        if (editorID.size() <= kMaximumEditorIDLength) {
+            return editorID;
+        }
+
+        std::uint32_t hash = 2166136261u;
+        for (const auto ch : editorID) {
+            hash ^= static_cast<unsigned char>(ch);
+            hash *= 16777619u;
+        }
+        const auto hashSuffix = std::format("_{:08X}", hash);
+        editorID.resize(kMaximumEditorIDLength - hashSuffix.size());
+        editorID += hashSuffix;
+        return editorID;
+    }
+
     std::string ReadFile(const char* path) {
         std::ifstream file(path, std::ios::binary);
         if (!file) {
@@ -202,29 +238,17 @@ namespace BookSettings {
         const auto pluginName = separator == std::string_view::npos ? perkKey : perkKey.substr(0, separator);
         const auto localID = separator == std::string_view::npos ? std::string_view{ "0" } : perkKey.substr(separator + 1);
 
-        std::string pluginPart;
-        pluginPart.reserve((std::min)(pluginName.size(), std::size_t{ 48 }));
-        for (const auto ch : pluginName) {
-            if (pluginPart.size() == 48) {
-                break;
-            }
-            pluginPart.push_back(std::isalnum(static_cast<unsigned char>(ch)) ? ch : '_');
-        }
-
-        std::uint32_t pluginHash = 2166136261u;
-        for (const auto ch : pluginName) {
-            pluginHash ^= static_cast<unsigned char>(ch);
-            pluginHash *= 16777619u;
-        }
-
         std::string normalizedLocalID(localID);
         std::ranges::transform(normalizedLocalID, normalizedLocalID.begin(), [](const unsigned char ch) {
             return std::isalnum(ch) ? static_cast<char>(std::toupper(ch)) : '_';
         });
-        return std::format("BoP_Learn_{}_{:08X}_{}", pluginPart, pluginHash, normalizedLocalID);
+        return BuildBookEditorID(pluginName, normalizedLocalID);
     }
 
     std::string MakeBookEditorID(const InternalFormInfo& info) {
+        if (!info.editorID.empty()) {
+            return BuildBookEditorID(info.pluginName, info.editorID);
+        }
         return MakeBookEditorID(MakePerkKey(info));
     }
 

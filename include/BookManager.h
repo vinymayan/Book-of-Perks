@@ -76,6 +76,7 @@ private:
     bool _initialized = false;
     bool _initializing = false;
     bool _rebuildRequested = false;
+    bool _legacyEditorIDsChecked = false;
     std::uint32_t _pendingBatches = 0;
     RE::FormID _baseBookID = 0;
     std::vector<RE::TESObjectBOOK*> _books;

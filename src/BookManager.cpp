@@ -8,6 +8,7 @@
 #include "RE/U/UIMessageQueue.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -235,6 +236,35 @@ namespace {
         return false;
     }
 
+    std::string MakeLegacyBookEditorID(std::string_view perkKey) {
+        const auto separator = perkKey.rfind('|');
+        const auto pluginName =
+            separator == std::string_view::npos ? perkKey : perkKey.substr(0, separator);
+        const auto localID =
+            separator == std::string_view::npos ? std::string_view{ "0" } : perkKey.substr(separator + 1);
+
+        std::string pluginPart;
+        pluginPart.reserve((std::min)(pluginName.size(), std::size_t{ 48 }));
+        for (const auto ch : pluginName) {
+            if (pluginPart.size() == 48) {
+                break;
+            }
+            pluginPart.push_back(std::isalnum(static_cast<unsigned char>(ch)) ? ch : '_');
+        }
+
+        std::uint32_t pluginHash = 2166136261u;
+        for (const auto ch : pluginName) {
+            pluginHash ^= static_cast<unsigned char>(ch);
+            pluginHash *= 16777619u;
+        }
+
+        std::string normalizedLocalID(localID);
+        std::ranges::transform(normalizedLocalID, normalizedLocalID.begin(), [](const unsigned char ch) {
+            return std::isalnum(ch) ? static_cast<char>(std::toupper(ch)) : '_';
+        });
+        return std::format("BoP_Learn_{}_{:08X}_{}", pluginPart, pluginHash, normalizedLocalID);
+    }
+
     bool IsGeneratedBook(RE::TESObjectBOOK* book) {
         if (!book) {
             return false;
@@ -294,19 +324,34 @@ void BookManager::Initialize() {
         }
     }
 
+    const bool checkLegacyEditorIDs = !_legacyEditorIDsChecked;
     std::vector<OperationContext> lookupOperations;
-    lookupOperations.reserve(deletes.size() + perks.size());
+    lookupOperations.reserve(
+        deletes.size() + perks.size() * (checkLegacyEditorIDs ? 2 : 1));
     for (const auto& perkKey : deletes) {
         OperationContext context;
         context.deleteIfFound = true;
         context.perkKey = perkKey;
-        context.editorID = BookSettings::MakeBookEditorID(perkKey);
         try {
             context.perkID = FormUtil::FormIDFromString(perkKey);
         } catch (...) {
             logger::debug("[BookManager] Perk key '{}' nao possui FormID runtime resolvivel.", perkKey);
         }
+        if (const auto info = Manager::GetSingleton()->GetInfoByID("Perk", context.perkID)) {
+            context.editorID = BookSettings::MakeBookEditorID(*info);
+        } else {
+            context.editorID = BookSettings::MakeBookEditorID(perkKey);
+        }
         RemoveBookRuntimeMapping(context.perkID);
+
+        if (checkLegacyEditorIDs) {
+            OperationContext legacyContext;
+            legacyContext.deleteIfFound = true;
+            legacyContext.perkID = context.perkID;
+            legacyContext.perkKey = perkKey;
+            legacyContext.editorID = MakeLegacyBookEditorID(perkKey);
+            lookupOperations.push_back(std::move(legacyContext));
+        }
         lookupOperations.push_back(std::move(context));
     }
 
@@ -320,9 +365,19 @@ void BookManager::Initialize() {
 
             auto perk = RE::TESForm::LookupByID<RE::BGSPerk>(info.formID);
             if (perk) {
+                const auto perkKey = BookSettings::MakePerkKey(info);
+                if (checkLegacyEditorIDs) {
+                    OperationContext legacyContext;
+                    legacyContext.deleteIfFound = true;
+                    legacyContext.perkID = perk->GetFormID();
+                    legacyContext.perkKey = perkKey;
+                    legacyContext.editorID = MakeLegacyBookEditorID(perkKey);
+                    lookupOperations.push_back(std::move(legacyContext));
+                }
+
                 OperationContext context;
                 context.perkID = perk->GetFormID();
-                context.perkKey = BookSettings::MakePerkKey(info);
+                context.perkKey = perkKey;
                 context.editorID = BookSettings::MakeBookEditorID(info);
                 context.createJson = BuildBookJson(info, baseBook, true);
                 context.updateJson = BuildBookJson(info, baseBook, false);
@@ -330,7 +385,9 @@ void BookManager::Initialize() {
             }
         }
     }
-    QueueLookupBatch(std::move(lookupOperations));
+    if (QueueLookupBatch(std::move(lookupOperations))) {
+        _legacyEditorIDsChecked = true;
+    }
 
     logger::info("[BookManager] Inicializacao DFG iniciada com {} batches.", _pendingBatches);
     if (_pendingBatches == 0) {
