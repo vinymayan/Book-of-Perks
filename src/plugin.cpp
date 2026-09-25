@@ -98,7 +98,7 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
     SetupLog();
     logger::info("Plugin loaded");
     SKSE::Init(skse);
-    SKSE::GetPapyrusInterface()->Register(Papyrus::Register);
+    //SKSE::GetPapyrusInterface()->Register(Papyrus::Register);
     BookManager::GetSingleton()->InstallHooks();
     DynamicFormsGeneratorListener::GetSingleton()->Register();
     SKSE::GetMessagingInterface()->RegisterListener(OnMessage);

@@ -1,4 +1,4 @@
-#include "BookManager.h"
+﻿#include "BookManager.h"
 
 #include "BookSettings.h"
 #include "logger.h"
@@ -51,9 +51,9 @@ namespace {
             }
 
             const bool result = func(self, reader);
-            if (result && self && reader) {
-                BookManager::GetSingleton()->ApplyBookPerkAndConsume(self, reader);
-            }
+            //if (result && self && reader) {
+            //    BookManager::GetSingleton()->ApplyBookPerkAndConsume(self, reader);
+            //}
             return result;
         }
 
@@ -930,13 +930,15 @@ bool BookManager::RegisterBookForPerk(
     RE::TESObjectBOOK* baseBook,
     DynamicFormSlot slot,
     std::string_view resolution) {
-    if (!book || !perk) {
+    if (!book || !perk || !baseBook || !baseBook->inventoryModel) {
+        logger::error("[BookManager] Livro, perk ou INAM do livro base invalido durante registro.");
         return false;
     }
 
     const auto bookID = book->GetFormID();
     const auto perkID = perk->GetFormID();
     RemoveBookRuntimeMapping(perkID);
+    book->inventoryModel = baseBook->inventoryModel;
     ConfigureBookForPerk(book, perk);
 
     if (std::ranges::find(_books, book) == _books.end()) {
@@ -951,7 +953,7 @@ bool BookManager::RegisterBookForPerk(
         info.description;
     _bookSlots[bookID] = slot;
 
-    logger::info("[BookManager] DFG '{}' -> perk {:08X}, book {:08X}, slot {}:{:06X} '{}'.",
+    logger::debug("[BookManager] DFG '{}' -> perk {:08X}, book {:08X}, slot {}:{:06X} '{}'.",
         resolution,
         perkID,
         bookID,
